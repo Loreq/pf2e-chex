@@ -41,7 +41,8 @@
         "EnableChex": "Dodaj/usuń Chex do bieżącej sceny",
         "RealmSelector": "Selektor Krain",
         "Settings": "Ustawienia",
-        "TerrainSelector": "Paleta terenu"
+        "TerrainSelector": "Paleta terenu",
+        "Dummy":"Zapobiega to wystąpieniu błędu"
       },
       "CUSTOMIZER": {
         "Title": "Dostosowywanie Chex",
