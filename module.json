@@ -28,8 +28,8 @@
       }
     ],
     "protected": false,
-    "url": "https://github.com/RicoTheBold/pf2e-chex",
-    "download": "https://github.com/RicoTheBold/pf2e-chex/archive/refs/tags/chex-v3.0.0.zip",
-    "manifest": "https://raw.githubusercontent.com/ricothebold/pf2e-chex/main/module.json"
+    "url": "https://github.com/MeusRex/pf2e-chex",
+    "download": "https://github.com/MeusRex/pf2e-chex/archive/refs/tags/chex-v3.0.0.zip",
+    "manifest": "https://raw.githubusercontent.com/meusrex/pf2e-chex/main/module.json"
   }
   
