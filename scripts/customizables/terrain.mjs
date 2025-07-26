@@ -23,7 +23,7 @@ export class Terrain {
             mountains: new Terrain("mountains", "Mountains", "icons/environment/wilderness/cave-entrance-mountain-blue.webp", "fa-solid fa-mountain", "greater", "#696969"),
             wetlands: new Terrain("wetlands", "Wetlands", "icons/environment/settlement/bridge-stone.webp", "fa-solid fa-bath", "difficult", "#ee82ee"),
             swamp: new Terrain("swamp", "Swamp", "icons/magic/nature/tree-spirit-black.webp", "fa-solid fa-bug", "greater", "#663399"),
-            water: new Terrain("water", "Water", "icons/environment/wilderness/island.webp", "fa-solid fa-tint", "water", "0000ff"),
+            water: new Terrain("water", "Water", "icons/environment/wilderness/island.webp", "fa-solid fa-tint", "water", "#0000ff"),
             desert: new Terrain("desert", "Desert", "icons/environment/wilderness/cave-entrance-rocky.webp", "fa-solid fa-sun", "open", "#ffff00")
         };
     }

@@ -5,11 +5,11 @@
     "authors": [
       { "name": "cedi" }
     ],
-    "version": "2.0.0",
+    "version": "3.0.0",
     "compatibility": {
-      "minimum": "12.331",
-      "verified": "12.331",
-      "maximum": "12"
+      "minimum": "13.344",
+      "verified": "13.345",
+      "maximum": "13"
     },
     "esmodules": [
       "scripts/main.mjs"
@@ -28,8 +28,8 @@
       }
     ],
     "protected": false,
-    "url": "https://github.com/MeusRex/pf2e-chex",
-    "download": "https://github.com/MeusRex/pf2e-chex/archive/refs/tags/chex-v2.0.0.zip",
-    "manifest": "https://raw.githubusercontent.com/meusrex/pf2e-chex/main/module.json"
+    "url": "https://github.com/RicoTheBold/pf2e-chex",
+    "download": "https://github.com/RicoTheBold/pf2e-chex/archive/refs/tags/chex-v3.0.0.zip",
+    "manifest": "https://raw.githubusercontent.com/ricothebold/pf2e-chex/main/module.json"
   }
   

@@ -11,7 +11,6 @@ import ChexHex from "./hex.mjs";
 import ChexDrawingLayer from "./chex-drawing-layer.mjs";
 import ChexSceneData from "./scene-data.mjs";
 import ChexOffset from "./chex-offset.mjs";
-import CHexData from "./scene-data.mjs";
 
 export default class ChexManager {
     constructor() {
@@ -63,28 +62,29 @@ export default class ChexManager {
 
     mode = C.MODE_REALM;
 
-    _extendSceneControlButtons(buttons) {
-        const tokens = buttons.find(b => b.name === "token");
+    _extendSceneControlButtons(controls) {
+        const tokenControls = controls["tokens"];
 
         if (this.active) {
 
             this.#showChexDetailsTool = {
-                name: "chexDetails",
+                name: "showChexDetailsTool",
                 title: "CHEX.TOOLS.ToggleHexTool",
                 icon: "fa-solid fa-hexagon-image",
                 toggle: true,
                 active: this.hud.enabled ?? false,
-                onClick: () => this.hud.toggle()
+                onClick: () => {this.hud.toggle()}
             };
 
             this.#showKingdomTool = {
-                name: "showKingdom",
+                name: "showKingdomTool",
                 title: "CHEX.TOOLS.ShowKingdomTool",
                 icon: "fa-solid fa-bank",
-                toggle: true,
+                toggle: false,
                 active: this.mode === C.MODE_REALM,
                 onClick: () => {
                     this.mode = C.MODE_REALM;
+                    this.#showKingdomTool.active = true;
                     this.#showTerrainTool.active = false;
                     this.#showTravelTool.active = false;
                     this.#refreshKingdomLayer();
@@ -92,13 +92,14 @@ export default class ChexManager {
             }
 
             this.#showTerrainTool = {
-                name: "showTerrain",
+                name: "showTerrainTool",
                 title: "CHEX.TOOLS.ShowTerrainTool",
                 icon: "fa-solid fa-mountain",
-                toggle: true,
+                toggle: false,
                 active: this.mode === C.MODE_TERRAIN,
                 onClick: () => {
                     this.mode = C.MODE_TERRAIN; 
+                    this.#showTerrainTool.active = true;
                     this.#showKingdomTool.active = false;
                     this.#showTravelTool.active = false;
                     this.#refreshKingdomLayer();
@@ -106,78 +107,123 @@ export default class ChexManager {
             }
 
             this.#showTravelTool = {
-                name: "showTravel",
+                name: "showTravelTool",
                 title: "CHEX.TOOLS.ShowTravelTool",
                 icon: "fa-solid fa-road",
-                toggle: true,
+                toggle: false,
                 active: this.mode === C.MODE_TRAVEL,
                 onClick: () => {
                     this.mode = C.MODE_TRAVEL;
+                    this.#showTravelTool.active = true;
                     this.#showKingdomTool.active = false;
                     this.#showTerrainTool.active = false;
                     this.#refreshKingdomLayer();
                 }
             }
 
-            tokens.tools.push(this.#showChexDetailsTool, this.#showKingdomTool, this.#showTerrainTool, this.#showTravelTool);
+            tokenControls.tools["showChexDetailsTool"] = this.#showChexDetailsTool;
+            tokenControls.tools["showKingdomTool"] = this.#showKingdomTool;
+            tokenControls.tools["showTerrainTool"] = this.#showTerrainTool;
+            tokenControls.tools["showTravelTool"] = this.#showTravelTool;
         }
 
         if (game.user.isGM) {
             
-            const toolBox = {
+            const chexTools = {
                 name: "chexTools",
                 title: "CHEX.TOOLS.ChexTools",
                 icon: "fa-solid fa-hexagon-image",
                 layer: "chex",
-                tools: [
-                    {
+                onChange: (event, active) => {if (active){
+                    canvas.chex.activate();
+                }},
+                tools: {
+// This button exists because Foundry VTT v13 has a mandatory "activeTool" parameter which will immediately activate the button when switching to these tools.
+// Enabling/Disabling Chex, launching the settings, or launching one of the edit tools would be awkward, so instead there's just this dead button.
+// Sadly, it logs an error if it's not visible.
+                    chexDummy: {
+                        name: "chexDummy",
+                        title: "CHEX.TOOLS.Dummy",
+                        icon: "fa-solid fa-thumbs-up",
+                        button: true,
+                        toggle: false,
+                        visible: true,
+                        onChange: (event,active) => {},
+                    },
+                    chexEnable: {
                         name: "chexEnable",
                         title: "CHEX.TOOLS.EnableChex",
                         icon: "fa-solid fa-chart-area",
                         toggle: true,
                         active: this.active,
-                        onClick: async () => this.#enableChex()
+                        onChange: async (event, active) => {if (active){this.#enableChex()}}
                     },
-                    {
+                    chexSettings: {
                         name: "chexSettings",
                         title: "CHEX.TOOLS.Settings",
                         icon: "fa-solid fa-cog",
+                        button: true,
                         toggle: false,
-                        onClick: async () => this.#showSettings()
+                        onChange: async (event,active) => {if (active){this.#showSettings()}}
                     }
-                ]
+                },
+                activeTool: "chexDummy"
             }
 
+            controls.chexTools = chexTools;
             if (this.active) {
-                toolBox.tools.push({
+                chexTools.tools["chexTerrainSelector"] = {
                     name: "chexTerrainSelector",
                     title: "CHEX.TOOLS.TerrainSelector",
                     icon: "fa-solid fa-mountain",
+                    button: true,
                     toggle: false,
-                    onClick: async () => 
-                    { 
-                        if (chex.realmSelector)
-                            chex.realmSelector.close();
-                        if (!chex.terrainSelector) 
-                            new TerrainPalette().render(true); 
+                    onChange: async (event, active) => {if (active) 
+                        { 
+                            if (chex.realmSelector)
+                                chex.realmSelector.close();
+                            if (!chex.terrainSelector) 
+                                new TerrainPalette().render(true);
+                            if (this.#showChexDetailsTool.active != true)
+                                {
+                                    this.hud.toggle();
+                                };
+                            this.#showChexDetailsTool.active = true;
+                            this.#showTerrainTool.active = true;
+                            this.mode = C.MODE_TERRAIN; 
+                            this.#showKingdomTool.active = false;
+                            this.#showTravelTool.active = false;
+                            this.#refreshKingdomLayer();
+                        }
                     }
-                },
-                {
+                };
+                chexTools.tools["chexRealmSelector"] ={
                     name: "chexRealmSelector",
                     title: "CHEX.TOOLS.RealmSelector",
                     icon: "fa-solid fa-bank",
+                    button: true,
                     toggle: false,
-                    onClick: async () => 
-                    {
-                        if (chex.terrainSelector)
-                            chex.terrainSelector.close(); 
-                        if (!chex.realmSelector) 
-                            new RealmPalette().render(true); 
+                    onChange: async (event, active) => {if (active)
+                        {
+                            if (chex.terrainSelector)
+                                chex.terrainSelector.close(); 
+                            if (!chex.realmSelector) 
+                                new RealmPalette().render(true);
+                            if (this.#showChexDetailsTool.active != true)
+                                {
+                                    this.hud.toggle();
+                                };
+                            this.#showChexDetailsTool.active = true;
+                            this.#showKingdomTool.active = true;
+                            this.mode = C.MODE_REALM;
+                            this.#showTerrainTool.active = false;
+                            this.#showTravelTool.active = false;
+                            this.#refreshKingdomLayer();
+ 
                         }
                     }
-                );
+                };
             }
-            buttons.push(toolBox);
         }
     }
 
@@ -332,12 +378,12 @@ export default class ChexManager {
         if (hex && canvas.activeLayer.name === ChexLayer.name) {
             const key = ChexData.getKey(hex.offset);
             // correct layer, first check terrain painter
-            if (chex.terrainSelector && chex.terrainSelector.activeTool) {
-                const activeTool = chex.terrainSelector.activeTool;
-                if (chex.terrains[activeTool] && hex.hexData.terrain !== activeTool) {
+            if (chex.terrainSelector && chex.terrainSelector.activeTerrainTool && this.mode === C.MODE_TERRAIN) {
+                const activeTerrainTool = chex.terrainSelector.activeTerrainTool;
+                if (chex.terrains[activeTerrainTool] && hex.hexData.terrain !== activeTerrainTool) {
                     const patch = {
-                        terrain: activeTool,
-                        travel: chex.terrains[activeTool].travel
+                        terrain: activeTerrainTool,
+                        travel: chex.terrains[activeTerrainTool].travel
                     };
                     
                     this.pendingPatches.push({
@@ -347,11 +393,11 @@ export default class ChexManager {
                     });
                 }
             }
-            else if (chex.realmSelector && chex.realmSelector.activeTool) {
-                const activeTool = chex.realmSelector.activeTool;
-                if (chex.realms[activeTool] && hex.hexData.claimed !== activeTool) {
+            else if (chex.realmSelector && chex.realmSelector.activeRealmTool && this.mode === C.MODE_REALM) {
+                const activeRealmTool = chex.realmSelector.activeRealmTool;
+                if (chex.realms[activeRealmTool] && hex.hexData.claimed !== activeRealmTool) {
                     const patch = {
-                        claimed: activeTool
+                        claimed: activeRealmTool
                     };
 
                     this.pendingPatches.push({

@@ -17,7 +17,7 @@ export default class TerrainPalette extends FormApplication {
     return  game.i18n.localize("CHEX.TERRAINSELECTOR.Title");
   }
 
-  activeTool = null;
+  activeTerrainTool = null;
 
   async _render(force, options) {
     chex.terrainSelector = this;
@@ -44,7 +44,7 @@ export default class TerrainPalette extends FormApplication {
     event.preventDefault();
     const control = event.currentTarget;
     const action = control.dataset.action;
-    this.activeTool = action;
+    this.activeTerrainTool = action;
 
     const form = document.getElementById(TerrainPalette.formId);
     const buttons = form.querySelectorAll('button');
