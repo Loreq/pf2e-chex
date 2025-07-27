@@ -70,8 +70,12 @@
 
 
 .chex-delete {
-  max-width: 27px;
-  min-height: 27px;
+  max-width: 24px;
+  max-height: 24px;
+  line-height: 22px;
+  align-items: center;
+  vertical-align: middle;
+  padding: 0px 0px 0px 3px;
 }
 
 .chex-add-button {
@@ -82,7 +86,12 @@
 }
 
 .chex-open-filepicker {
-  width: fit-content;
+  max-width: 24px;
+  max-height: 24px;
+  line-height: 22px;
+  align-items: center;
+  vertical-align: middle;
+  padding: 0px 0px 0px 3px;
 }
 
 .chex-flex {
@@ -139,8 +148,9 @@
 
 /* Style for each button */
 .chex-terrain-selector button {
-  margin-bottom: 5px; /* Adjust the margin as needed */
+  margin-bottom: 4px; /* Adjust the margin as needed */
   width: 30px;
+  padding: 0px 0px 0px 4px;
 }
 
 .chex-terrain-selector button.active {

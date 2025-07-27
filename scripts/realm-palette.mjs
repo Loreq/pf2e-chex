@@ -20,7 +20,7 @@ export default class RealmPalette extends FormApplication {
     return  game.i18n.localize("CHEX.REALMSELECTOR.Title");
   }
 
-  get activeTool() {
+  get activeRealmTool() {
     const selectElement = document.getElementById('chex-realm-select');
     return selectElement.options[selectElement.selectedIndex].value;
   }
@@ -51,14 +51,14 @@ export default class RealmPalette extends FormApplication {
     const control = event.currentTarget;
     const action = control.dataset.action;
     
-    if (action === "report" && this.activeTool) {
-      const realm = this.activeTool;
+    if (action === "report" && this.activeRealmTool) {
+      const realm = this.activeRealmTool;
       let hexes = Object.values(canvas.scene.getFlag(MODULE_ID, CHEX_DATA_KEY).hexes);
       let mergedResources = {};
 
       // Iterate over each hexData and sum up the resources
       hexes.forEach((hexData) => {
-        if (hexData.claimed === this.activeTool) {
+        if (hexData.claimed === this.activeRealmTool) {
 
           const resources = ChexFormulaParser.getResources(hexData);
           if (Object.keys(resources)) {
