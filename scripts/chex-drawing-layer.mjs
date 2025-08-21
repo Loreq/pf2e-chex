@@ -1,4 +1,4 @@
-import * as C from "./const.mjs"
+import * as C from "./const.mjs";
 import ChexFormulaParser from "./formula-parser.mjs";
 
 export default class ChexDrawingLayer extends PIXI.Container {
@@ -6,137 +6,164 @@ export default class ChexDrawingLayer extends PIXI.Container {
     super();
     this.zIndex = 0;
     this.visible = false;
+
+    /**
+     * Stores a PIXI.Graphics object and its fingerprint for each layer/type
+     * Map<string, { graphics: PIXI.Graphics, fingerprint: string }>
+     */
+    this._graphicsByType = new Map();
   }
-
-  draw() {
-    this.removeChildren().forEach(c => c.destroy());
-    this.mask = canvas.primary.mask;
-    const g = this.addChild(new PIXI.Graphics());
-
-    switch (chex.manager.mode) {
-      case C.MODE_TERRAIN:
-        this.#drawTerrain(g);
-        break;
-
-      case C.MODE_TRAVEL: 
-        this.#drawTravel(g);
-        break;
-
-      case C.MODE_REALM:
-      default:
-        this.#drawRealms(g);
-        break;
-    }
-  }
-
-  #drawRealms(g) {
-    const groupedHexes = {};
-
-    chex.manager.hexes.filter(h => h.hexData.claimed).forEach(hex => {
-      const realmId = hex.hexData.claimed;
-
-      if (!groupedHexes[realmId]) {
-        groupedHexes[realmId] = [];
-      }
-
-      groupedHexes[realmId].push(hex);
-    });
-    
-    for (const realmId in groupedHexes) {
-      if (groupedHexes.hasOwnProperty(realmId)) {
-        const hexGroup = groupedHexes[realmId];
-        this.#drawSub(g, hexGroup, chex.realms[realmId]?.color || C.FALLBACK_COLOR);
-      }
-    }
-  }
-
-  #drawTerrain(g) {
-    const groupedHexes = {};
-
-    chex.manager.hexes.forEach(hex => {
-      const terrainId = hex.terrain.id;
-
-      if (!groupedHexes[terrainId]) {
-        groupedHexes[terrainId] = [];
-      }
-
-      groupedHexes[terrainId].push(hex);
-    });
-    
-    for (const terrainId in groupedHexes) {
-      if (groupedHexes.hasOwnProperty(terrainId)) {
-        const hexGroup = groupedHexes[terrainId];
-  
-        this.#drawSub(g, hexGroup, chex.terrains[terrainId]?.color || C.FALLBACK_COLOR);
-      }
-    }
-  }
-
-  #drawTravel(g) {
-    const groupedHexes = {};
-
-    // Iterate through each hex
-    chex.manager.hexes.forEach(hex => {
-      const travelId = ChexFormulaParser.getTravel(hex.hexData);
-      //const travelId = hex.travel.id;
-
-      // If the travelId is not in the groupedHexes object, create an empty array
-      if (!groupedHexes[travelId]) {
-        groupedHexes[travelId] = [];
-      }
-
-    // Add the hex to the corresponding group
-      groupedHexes[travelId].push(hex);
-    });
-    
-    for (const travelId in groupedHexes) {
-      if (groupedHexes.hasOwnProperty(travelId)) {
-        const hexGroup = groupedHexes[travelId];
-    
-        // Assuming ChexKingdomLayer is the class containing the #drawSub method
-        this.#drawSub(g, hexGroup, chex.travels[travelId]?.color || C.FALLBACK_COLOR);
-      }
-    }
-  }
-
-  #drawSub(g, hexes, color) {
-    const polygons = ChexDrawingLayer.#buildPolygons(hexes);
-    g.beginFill(color, 0.15).lineStyle({alignment: 0, color: color, width: 4})
-    for ( const polygon of polygons ) {
-      g.drawShape(polygon.outer);
-      for ( const hole of polygon.holes ) {
-        g.beginHole(0xFFFFFF).drawShape(hole).endHole();
-      }
-    }
-    g.endFill();
-  }
-  /* -------------------------------------------- */
 
   /**
-   * A helper function to combine hex coordinates to form polygon regions.
-   * @param {KingmakerHex[]} hexes       The hexes which belong to this polygon type
-   * @returns {Array<{outer: PIXI.Polygon, holes: PIXI.Polygon[]}>}
+   * Draws or toggles the layer corresponding to the current mode.
+   * Only one layer is visible at a time; previously drawn layers are cached.
    */
-  static #buildPolygons(hexes) {
-    const g = canvas.grid;
-    const c = new ClipperLib.Clipper();
-    let polyTree = new ClipperLib.PolyTree();
+  async draw() {
+    this.mask = canvas.primary.mask;
 
-    // Unionize all hexes
-    c.AddPath([], ClipperLib.PolyType.ptSubject, true);
-    for ( const hex of hexes ) {
-      const {x, y} = hex.topLeft;
-      const p = new PIXI.Polygon(g.getVertices(hex.offset));
-      c.AddPath(p.toClipperPoints(), ClipperLib.PolyType.ptClip, true);
-    }
-    c.Execute(ClipperLib.ClipType.ctUnion, polyTree, ClipperLib.PolyFillType.pftEvenOdd, ClipperLib.PolyFillType.pftNonZero);
+    const layerType = this.#getLayerTypeFromMode();
+    if (!layerType) return;
 
-    // Convert PolyTree solutions an ExPolygons format converted to PIXI.Polygons
-    const polygons = ClipperLib.JS.PolyTreeToExPolygons(polyTree);
-    for ( const polygon of polygons ) {
-      polygon.outer = PIXI.Polygon.fromClipperPoints(polygon.outer);
-      polygon.holes = polygon.holes.map(hole => PIXI.Polygon.fromClipperPoints(hole));
+    // Hide all other layers first
+    for (const [key, entry] of this._graphicsByType.entries()) {
+      if (entry) entry.graphics.visible = false;
     }
-    return polygons;
+
+    // Draw or show the requested layer
+    await this.#toggleOrDrawLayer(layerType);
+  }
+
+  /**
+   * Returns the layer type string based on the current manager mode.
+   * @private
+   * @returns {"terrain"|"realm"|"travel"|null}
+   */
+  #getLayerTypeFromMode() {
+    switch (chex.manager.mode) {
+      case C.MODE_TERRAIN: return "terrain";
+      case C.MODE_REALM: return "realm";
+      case C.MODE_TRAVEL: return "travel";
+      default: return null;
+    }
+  }
+
+  /**
+   * Shows cached graphics or draws it if the hexes/color changed.
+   * @private
+   * @param {string} layerType - "terrain", "realm", or "travel"
+   */
+  async #toggleOrDrawLayer(layerType) {
+    const hexGroups = this.#getHexGroups(layerType);
+
+    for (const [key, hexes] of Object.entries(hexGroups)) {
+      const color = this.#getColor(layerType, key);
+      const fingerprint = this.#computeLayerFingerprint(hexes, color);
+
+      const cached = this._graphicsByType.get(key);
+
+      if (cached?.fingerprint === fingerprint) {
+        // Already drawn, just show it
+        cached.graphics.visible = true;
+      } else {
+        // Remove old graphics if exists
+        if (cached) cached.graphics.destroy();
+
+        // Draw new graphics
+        const g = await this.#drawHexGroup(hexes, color, 0.15, key);
+        this._graphicsByType.set(key, { graphics: g, fingerprint });
+      }
+    }
+  }
+
+  /**
+   * Draws a group of hexes with specified color/alpha and returns the PIXI.Graphics object.
+   * @private
+   * @param {Array} hexes - Array of hex objects
+   * @param {number} color - Hex color value
+   * @param {number} alpha - Transparency (0.0 - 1.0)
+   * @param {string} key - Unique key for caching
+   * @returns {PIXI.Graphics} The drawn graphics object
+   */
+  async #drawHexGroup(hexes, color, alpha, key) {
+    if (!hexes.length) return;
+
+    const g = new PIXI.Graphics();
+    g.beginFill(color, alpha).lineStyle({ width: 1, color });
+
+    for (let i = 0; i < hexes.length; i++) {
+      const hex = hexes[i];
+      const vertices = canvas.grid.getVertices(hex.offset);
+      g.drawPolygon(vertices);
+
+      // Yield occasionally to avoid freezing on large maps
+      if (i % 1000 === 0) await new Promise(resolve => requestIdleCallback(resolve));
+    }
+
+    g.endFill();
+    this.addChild(g);
+    return g;
+  }
+
+  /**
+   * Computes a lightweight fingerprint for a hex group + color.
+   * Used to detect changes and avoid unnecessary redraws.
+   * @private
+   * @param {Array} hexes - Array of hex objects
+   * @param {number} color - Fill color
+   * @returns {string} Fingerprint string
+   */
+  #computeLayerFingerprint(hexes, color) {
+    const ids = hexes.map(h => h.id).sort().join(",");
+    return `${color}:${ids}`;
+  }
+
+  /**
+   * Returns the fill color for a given layer type and key.
+   * @private
+   * @param {string} layerType - "terrain", "realm", or "travel"
+   * @param {string} key - Layer key string
+   * @returns {number} Hex color value
+   */
+  #getColor(layerType, key) {
+    switch (layerType) {
+      case "terrain": return chex.terrains[key.split("-")[1]]?.color || C.FALLBACK_COLOR;
+      case "realm": return chex.realms[key.split("-")[1]]?.color || C.FALLBACK_COLOR;
+      case "travel": return chex.travels[key.split("-")[1]]?.color || C.FALLBACK_COLOR;
+      default: return C.FALLBACK_COLOR;
+    }
+  }
+
+  /**
+   * Returns hex groups by layer type. Each group is keyed for caching.
+   * @private
+   * @param {string} layerType - "terrain", "realm", or "travel"
+   * @returns {Object<string, Array>} Object mapping keys to arrays of hexes
+   */
+  #getHexGroups(layerType) {
+    const groups = {};
+    switch (layerType) {
+      case "terrain":
+        for (const hex of chex.manager.hexes) {
+          const tid = hex.terrain.id;
+          if (!groups[`terrain-${tid}`]) groups[`terrain-${tid}`] = [];
+          groups[`terrain-${tid}`].push(hex);
+        }
+        break;
+      case "realm":
+        for (const hex of chex.manager.hexes) {
+          const rid = hex.hexData.claimed;
+          if (!groups[`realm-${rid}`]) groups[`realm-${rid}`] = [];
+          groups[`realm-${rid}`].push(hex);
+        }
+        break;
+      case "travel":
+        for (const hex of chex.manager.hexes) {
+          const tid = ChexFormulaParser.getTravel(hex.hexData);
+          if (!groups[`travel-${tid}`]) groups[`travel-${tid}`] = [];
+          groups[`travel-${tid}`].push(hex);
+        }
+        break;
+    }
+    return groups;
   }
 }
