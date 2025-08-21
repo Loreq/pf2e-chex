@@ -15,8 +15,8 @@ export default class ChexDrawingLayer extends PIXI.Container {
   }
 
   /**
-   * Draws or toggles the layer corresponding to the current mode.
-   * Only one layer is visible at a time; previously drawn layers are cached.
+   * Draw or toggle the layer for the current mode.
+   * Keeps previously drawn layers in the cache and avoids unnecessary redraws.
    */
   async draw() {
     this.mask = canvas.primary.mask;
@@ -29,15 +29,11 @@ export default class ChexDrawingLayer extends PIXI.Container {
       if (entry) entry.graphics.visible = false;
     }
 
-    // Draw or show the requested layer
+    // Draw or toggle the requested layer
     await this.#toggleOrDrawLayer(layerType);
   }
 
-  /**
-   * Returns the layer type string based on the current manager mode.
-   * @private
-   * @returns {"terrain"|"realm"|"travel"|null}
-   */
+  /** Returns "terrain", "realm", or "travel" based on current mode */
   #getLayerTypeFromMode() {
     switch (chex.manager.mode) {
       case C.MODE_TERRAIN: return "terrain";
@@ -47,11 +43,6 @@ export default class ChexDrawingLayer extends PIXI.Container {
     }
   }
 
-  /**
-   * Shows cached graphics or draws it if the hexes/color changed.
-   * @private
-   * @param {string} layerType - "terrain", "realm", or "travel"
-   */
   async #toggleOrDrawLayer(layerType) {
     const hexGroups = this.#getHexGroups(layerType);
 
@@ -62,13 +53,9 @@ export default class ChexDrawingLayer extends PIXI.Container {
       const cached = this._graphicsByType.get(key);
 
       if (cached?.fingerprint === fingerprint) {
-        // Already drawn, just show it
-        cached.graphics.visible = true;
+        cached.graphics.visible = true; // Already drawn, just show
       } else {
-        // Remove old graphics if exists
-        if (cached) cached.graphics.destroy();
-
-        // Draw new graphics
+        if (cached) cached.graphics.destroy(); // Remove outdated graphics
         const g = await this.#drawHexGroup(hexes, color, 0.15, key);
         this._graphicsByType.set(key, { graphics: g, fingerprint });
       }
@@ -79,38 +66,95 @@ export default class ChexDrawingLayer extends PIXI.Container {
    * Draws a group of hexes with specified color/alpha and returns the PIXI.Graphics object.
    * @private
    * @param {Array} hexes - Array of hex objects
-   * @param {number} color - Hex color value
+   * @param {number} color - Fill color
    * @param {number} alpha - Transparency (0.0 - 1.0)
    * @param {string} key - Unique key for caching
-   * @returns {PIXI.Graphics} The drawn graphics object
+   * @returns {PIXI.Graphics} - The drawn graphics object
    */
   async #drawHexGroup(hexes, color, alpha, key) {
     if (!hexes.length) return;
 
     const g = new PIXI.Graphics();
-    g.beginFill(color, alpha).lineStyle({ width: 1, color });
+
+    // --- Fill all hexes, no per-hex borders ---
+    g.beginFill(color, alpha);
+
+    // Map<normalizedEdgeKey, [x1,y1,x2,y2]>; edges seen twice are internal and removed.
+    const outerEdges = new Map();
+
+    const round2 = (n) => Math.round(n * 100) / 100; // tame tiny float diffs
+    const edgeKey = (x1, y1, x2, y2) => {
+      // normalize order + round to reduce float noise
+      const a = [round2(x1), round2(y1)];
+      const b = [round2(x2), round2(y2)];
+      const [ax, ay] = a, [bx, by] = b;
+      return (ax < bx || (ax === bx && ay <= by))
+        ? `${ax},${ay}|${bx},${by}`
+        : `${bx},${by}|${ax},${ay}`;
+    };
+
+    const addEdge = (x1, y1, x2, y2) => {
+      const k = edgeKey(x1, y1, x2, y2);
+      if (outerEdges.has(k)) outerEdges.delete(k);    // shared edge -> internal
+      else outerEdges.set(k, [x1, y1, x2, y2]);       // store original coords for drawing
+    };
 
     for (let i = 0; i < hexes.length; i++) {
       const hex = hexes[i];
-      const vertices = canvas.grid.getVertices(hex.offset);
-      g.drawPolygon(vertices);
+      const verts = canvas.grid.getVertices(hex.offset);
 
-      // Yield occasionally to avoid freezing on large maps
-      if (i % 1000 === 0) await new Promise(resolve => requestIdleCallback(resolve));
+      // Draw filled polygon
+      g.drawPolygon(verts);
+
+      // Collect edges (support both flat number[] and array of Points/arrays)
+      if (Array.isArray(verts) && verts.length) {
+        const isFlat = typeof verts[0] === "number";
+        if (isFlat) {
+          // flat [x0,y0,x1,y1,...]
+          for (let j = 0; j < verts.length; j += 2) {
+            const x1 = verts[j], y1 = verts[j + 1];
+            const j2 = (j + 2) % verts.length;
+            const x2 = verts[j2], y2 = verts[j2 + 1];
+            addEdge(x1, y1, x2, y2);
+          }
+        } else {
+          // array of Points or [x,y]
+          for (let j = 0; j < verts.length; j++) {
+            const p1 = verts[j];
+            const p2 = verts[(j + 1) % verts.length];
+            const x1 = p1.x ?? p1[0], y1 = p1.y ?? p1[1];
+            const x2 = p2.x ?? p2[0], y2 = p2.y ?? p2[1];
+            addEdge(x1, y1, x2, y2);
+          }
+        }
+      }
+
+      // Yield occasionally on huge maps
+      if (i % 500 === 0) await new Promise(r => requestIdleCallback(r));
     }
 
     g.endFill();
+
+    // --- Draw one outline using the SAME color as the fill ---
+    g.lineStyle({ width: 2, color, alpha: 1 });
+    let drawn = 0;
+    for (const [, [x1, y1, x2, y2]] of outerEdges) {
+      g.moveTo(x1, y1);
+      g.lineTo(x2, y2);
+      if (++drawn % 4000 === 0) await new Promise(r => requestIdleCallback(r));
+    }
+
     this.addChild(g);
     return g;
   }
 
+
   /**
-   * Computes a lightweight fingerprint for a hex group + color.
-   * Used to detect changes and avoid unnecessary redraws.
+   * Compute a lightweight fingerprint for a hex group + color
    * @private
    * @param {Array} hexes - Array of hex objects
    * @param {number} color - Fill color
-   * @returns {string} Fingerprint string
+   * @returns {string} - Fingerprint string
    */
   #computeLayerFingerprint(hexes, color) {
     const ids = hexes.map(h => h.id).sort().join(",");
@@ -118,11 +162,10 @@ export default class ChexDrawingLayer extends PIXI.Container {
   }
 
   /**
-   * Returns the fill color for a given layer type and key.
+   * Returns the color for a layerType and key
    * @private
-   * @param {string} layerType - "terrain", "realm", or "travel"
-   * @param {string} key - Layer key string
-   * @returns {number} Hex color value
+   * @param {string} layerType - "terrain", "realm", "travel"
+   * @param {string} key - Layer key
    */
   #getColor(layerType, key) {
     switch (layerType) {
@@ -134,10 +177,10 @@ export default class ChexDrawingLayer extends PIXI.Container {
   }
 
   /**
-   * Returns hex groups by layer type. Each group is keyed for caching.
+   * Returns hex groups based on layerType
    * @private
-   * @param {string} layerType - "terrain", "realm", or "travel"
-   * @returns {Object<string, Array>} Object mapping keys to arrays of hexes
+   * @param {string} layerType - "terrain", "realm", "travel"
+   * @returns {Object<string, Array>} - key => hexes array
    */
   #getHexGroups(layerType) {
     const groups = {};
